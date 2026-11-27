@@ -135,6 +135,14 @@ class DownloadStagingTests(unittest.TestCase):
         )
         self.assertEqual(len(self.calls), 2)
 
+    def test_site_without_a_release_stages_only_the_workbooks(self):
+        with patch.object(downloads, "command", side_effect=self.command):
+            downloads.stage_workbooks(self.destination, self.examples)
+        self.assertEqual(self.calls, [])
+        self.assertTrue((self.destination / "swap_pricing_example.xlsx").is_file())
+        for asset in downloads.ASSETS:
+            self.assertFalse((self.destination / asset).exists())
+
     def test_organized_examples_keep_the_same_download_filenames(self):
         nested = self.examples / "workbooks"
         nested.mkdir()

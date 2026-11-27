@@ -128,19 +128,36 @@ def stage(repository, tag, destination, examples):
                         )
         except BadZipFile as error:
             raise RuntimeError(f"Release {tag}: invalid Excel ZIP: {error}") from error
-        examples = Path(examples)
-        workbook_directory = (
-            examples / "workbooks" if (examples / "workbooks").is_dir() else examples
-        )
-        workbooks = list(workbook_directory.glob("*.xlsx"))
-        if not workbooks:
-            raise RuntimeError(f"No example workbooks found in {examples}")
+        workbooks = example_workbooks(examples)
         destination = Path(destination)
         destination.mkdir(parents=True, exist_ok=True)
         for asset in ASSETS:
             shutil.copy2(downloaded / asset, destination / asset)
-        for workbook in workbooks:
-            shutil.copy2(workbook, destination / workbook.name)
+        copy_workbooks(workbooks, destination)
+
+
+def example_workbooks(examples):
+    examples = Path(examples)
+    workbook_directory = (
+        examples / "workbooks" if (examples / "workbooks").is_dir() else examples
+    )
+    workbooks = list(workbook_directory.glob("*.xlsx"))
+    if not workbooks:
+        raise RuntimeError(f"No example workbooks found in {examples}")
+    return workbooks
+
+
+def copy_workbooks(workbooks, destination):
+    destination = Path(destination)
+    destination.mkdir(parents=True, exist_ok=True)
+    for workbook in workbooks:
+        shutil.copy2(workbook, destination / workbook.name)
+
+
+def stage_workbooks(destination, examples):
+    """Publish the example workbooks before any add-in release exists."""
+    print("No published release: staging example workbooks only", flush=True)
+    copy_workbooks(example_workbooks(examples), destination)
 
 
 def main():
@@ -152,7 +169,9 @@ def main():
     selection.add_argument("--tag")
     download = actions.add_parser("stage")
     download.add_argument("--repository", required=True)
-    download.add_argument("--tag", required=True)
+    download.add_argument(
+        "--tag", help="Release to stage; omit to stage only the example workbooks"
+    )
     download.add_argument("--destination", type=Path, required=True)
     download.add_argument("--examples", type=Path, required=True)
     args = parser.parse_args()
@@ -163,8 +182,10 @@ def main():
             with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
                 for key, value in selected.items():
                     output.write(f"{key}={value}\n")
-        else:
+        elif args.tag:
             stage(args.repository, args.tag, args.destination, args.examples)
+        else:
+            stage_workbooks(args.destination, args.examples)
     except (RuntimeError, ValueError, OSError) as error:
         print(f"Excel download staging failed: {error}", file=sys.stderr)
         return 1
