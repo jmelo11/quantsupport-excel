@@ -1,0 +1,62 @@
+{
+  "POSITIONS": [
+    [
+      "Deposit A",
+      "Deposit",
+      100000.0,
+      0.04,
+      0.0,
+      "SOFR",
+      "LongReceive"
+    ],
+    [
+      "Deposit B",
+      "Deposit",
+      300000.0,
+      0.06,
+      0.0,
+      "SOFR",
+      "LongReceive"
+    ],
+    [
+      "SOFR A",
+      "Swap",
+      100000.0,
+      0.04,
+      0.001,
+      "SOFR",
+      "LongReceive"
+    ],
+    [
+      "SOFR B",
+      "Swap",
+      300000.0,
+      0.06,
+      0.003,
+      "SOFR",
+      "LongReceive"
+    ],
+    [
+      "Term SOFR",
+      "Swap",
+      200000.0,
+      0.055,
+      0.002,
+      "TermSOFR3m",
+      "LongReceive"
+    ],
+    [
+      "Short SOFR",
+      "Swap",
+      50000.0,
+      0.04,
+      0.001,
+      "SOFR",
+      "PayShort"
+    ]
+  ],
+  "VALUATION_DATE": "2026-02-24",
+  "START": "2026-03-02",
+  "DEPOSIT_MATURITY": "2026-09-02",
+  "SWAP_MATURITY": "2028-03-02"
+}

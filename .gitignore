@@ -1,0 +1,7 @@
+/target/
+/.venv*/
+/dist/
+__pycache__/
+.DS_Store
+/docs/_build/
+/docs/excel/functions/
