@@ -1,9 +1,10 @@
 Risk, portfolios and historical snapshots
 =========================================
 
-Evaluation requests follow the Rust library's ``Request`` and
-``EvaluationResults``. Direct evaluation returns one number or table. Use a
-stored result when several requested measures share one evaluation:
+Evaluation requests correspond to ``Request`` and ``EvaluationResults`` in the
+Rust library. ``QS.EVALUATE`` returns one number or table. When you need several
+measures from the same valuation, store them once with
+``QS.EVALUATE.RESULTS`` and read each one from the stored result:
 
 .. code-block:: text
 
@@ -16,25 +17,35 @@ stored result when several requested measures share one evaluation:
 Sensitivities and cashflows
 ---------------------------
 
-Sensitivities are raw derivatives in the pricer's value units per unit factor.
-For a decimal-rate factor, multiply by 0.0001 for an approximate +1 bp value
-change. Retain each factor's actual units; futures price points, currency spots,
-volatility and rates are not interchangeable. Risk is calculated from the
-original trade and model, not from a compressed cashflow report.
-Sensitivity tables order recognized tenors and pillar dates from shortest to
-longest maturity; labels without a recognized maturity follow the dated rows.
+**Sensitivities** are raw derivatives: the change in value, in the pricer's
+value units, per unit change in each market input.
 
-Cashflows contain signed undiscounted amounts in each payment currency, with
-positive receipts and negative payments. The detailed coupon report retains
-accrual dates, fixing and contractual indices, notional and rate conventions.
-The summary groups Interest, Capital, Other and Total by payment date/currency.
-It does not convert currencies or allocate accrual-period net interest income.
+- For an input quoted as a decimal rate, multiply by 0.0001 to estimate the
+  effect of a +1 bp move.
+- Each input keeps its own units. Futures price points, FX spots, volatilities
+  and rates are not interchangeable.
+- Risk is calculated from the full trade and model, not from the cashflow
+  report.
+- Rows are sorted by tenor or pillar date, shortest first. Rows without a
+  recognizable maturity come after the dated rows.
 
-FairRate(index) requests one zero-based leg or loan coupon segment. Swap leg 0
-solves the fixed coupon and leg 1 solves the floating spread, including all legs
-and principal in the zero-PV condition. Loan segments are solved successively,
-locking earlier rates. Bounded loan coupons remain unsupported for fair-rate
-solving. Separate targets require separate evaluations.
+**Cashflows** are signed, undiscounted amounts in each payment currency.
+Receipts are positive and payments negative.
+
+- The coupon report shows accrual dates, fixing and contract indices, notional
+  and rate conventions.
+- The cashflow summary totals Interest, Capital, Other and Total by payment date
+  and currency. It does not convert currencies or spread net interest income
+  over accrual periods.
+
+**FairRate(index)** solves for one swap leg or loan coupon segment, numbered
+from 0.
+
+- For a swap, leg 0 solves the fixed coupon and leg 1 the floating spread. The
+  solve sets the PV of all legs and principal to zero.
+- Loan segments are solved in order, fixing each earlier rate before the next.
+  Loans with a floor or cap cannot be solved.
+- Use a separate evaluation for each leg or segment.
 
 .. code-block:: text
 
@@ -53,23 +64,30 @@ Portfolio aggregation
    B5 =QS.RESULT.COUPONS(B3)
    B6 =QS.RESULT.CASHFLOW.SUMMARY(B3)
 
-The portfolio uses the caller-supplied name as its identifier and holds an ordered trade-reference array. Repeated handles count as
-repeated positions. Pass one pricer for all members or one per member. Value and
-Sensitivities are computed natively in the context base currency, including
-FX risk. The optional currency argument must match that base currency. Unsupported or
-incomplete measures remain absent.
+``QS.PORTFOLIO.CREATE`` takes a name and an ordered range of trades.
 
-Evaluation streams one trade at a time and releases its intermediate result.
-Compatible coupons are grouped using notional-weighted rates or spreads, while
-pay/receive directions, nonlinear payoffs and distinct conventions remain
-separate. The portfolio does not retain a combined AD graph. For individual
-scalar values, use EVALUATE.RANGE with one shared committed context instead.
+- A trade that appears twice counts as two positions.
+- Pass one pricer for all trades, or one pricer per trade.
+- Value and Sensitivities are in the context's base currency and include FX
+  risk. The optional currency argument must match that base currency.
+- A measure that is not supported for every trade is left out of the result.
+
+How results are combined:
+
+- Trades are priced one at a time, so memory use stays low for large books.
+- Coupons with the same terms are combined, using notional-weighted rates or
+  spreads.
+- Coupons with opposite pay/receive directions, nonlinear payoffs or different
+  conventions stay on separate rows.
+
+To get one value per trade instead of a combined result, use
+``QS.EVALUATE.RANGE`` with a single context.
 
 Archive complete dated markets
 ------------------------------
 
-Prepare every root with its full contribution array. Put prepared-context
-references in A2:A10 and corresponding observation timestamps in F2:F10:
+Build one complete context for each market date. Put references to these
+contexts in A2:A10 and their observation timestamps in F2:F10:
 
 .. code-block:: text
 
@@ -78,18 +96,31 @@ references in A2:A10 and corresponding observation timestamps in F2:F10:
    H2 =QS.SNAPSHOT.FROM.RANGE("history",A2:A10,TRANSPOSE(F2:F10))
    H3 =QS.EVALUATE.FROM.SNAPSHOT(H2,trades,dates,pricer,"Value")
 
-Observation timestamps require an explicit RFC 3339 offset, for example
-2026-01-15T16:00:00Z. The selected quote-store reference date remains the actual
-valuation date, even if an observation crosses a UTC day boundary. Dates and
-trade references align one-for-one; blanks are rejected instead of shifting rows.
-The output follows the original input order.
+Timestamps:
 
-Defaults are Previous/Mid. Previous selects the most recent complete observation
-at or before a request; Exact requires an exact match; Closest may select a future
-observation and chooses the earlier one on a tie. Missing Bid/Ask never falls
-back to Mid. Duplicate UTC observation timestamps fail explicitly.
+- Timestamps use RFC 3339 with an explicit time-zone offset, for example
+  2026-01-15T16:00:00Z.
+- The valuation date is the selected context's date, even if the timestamp
+  falls on a different UTC day.
+- Two contexts with the same UTC timestamp are an error.
 
-For individual selection and inspection:
+Trades and dates:
+
+- Each trade has one requested date, in the same position in its range.
+- Blank entries are errors; rows are never shifted.
+- Results come back in the original input order.
+
+Selecting a market:
+
+- The default is ``Previous`` with ``Mid`` quotes.
+- ``Previous`` picks the latest complete market at or before the requested
+  time.
+- ``Exact`` requires a market at exactly that time.
+- ``Closest`` picks the nearest market, which may be later. On a tie it picks
+  the earlier one.
+- A missing Bid or Ask quote is an error. It is not replaced by Mid.
+
+To select and inspect a single market:
 
 .. code-block:: text
 
@@ -99,22 +130,27 @@ For individual selection and inspection:
    J5 =QS.SNAPSHOT.REFERENCE.DATE(J3)
    J6 =QS.CONTEXT.FROM.SNAPSHOT("historical",H2,J2,fixings)
 
-Snapshots store quote observations, FX and construction configurations, including
-direct zero-rate quotes, credit, volatility and simulation settings. Supplied
-runtime curves cannot be captured. Fixings and their publication vintages are
-separate; supply a fixing contribution or committed context to historical pricing.
-No fixing-vintage filter is inferred. Native JSON import/export is available
-under SNAPSHOT.FROM.JSON and SNAPSHOT.TO.JSON; Excel limits exported cell text
-to 32767 UTF-16 units.
+What a snapshot contains:
+
+- Quotes, FX rates and curve settings, including zero-rate quotes, credit,
+  volatility and simulation settings.
+- Not curves supplied as already-built objects. Curves defined from quotes or
+  zero rates are rebuilt from the stored inputs.
+- Not fixings. Pass fixings to historical pricing as a fixing addition or a
+  context. Fixings are used as entered; they are not filtered by publication
+  date.
+
+To save or load snapshots as JSON, use ``SNAPSHOT.FROM.JSON`` and
+``SNAPSHOT.TO.JSON``. Excel limits the exported text in one cell to 32,767
+UTF-16 characters.
 
 Historical batch performance
 ----------------------------
 
-The native batch groups rows by matched snapshot and constructs each market
-once. It returns scalar values in the original input order without creating
-per-row context or evaluation-result objects. Evaluation completes synchronously
-during Excel calculation.
+``QS.EVALUATE.FROM.SNAPSHOT`` builds each selected market once and shares it
+across all trades that use it. It returns one value per trade, in input order,
+without creating a context or result object for each row. It finishes during
+Excel's normal calculation; it does not run in the background.
 
-The historical and context example workbooks show this batch API. Portable tests
-verify snapshot selection, calibration reuse, input ordering and stale-handle
-validation. Worksheet execution requires Windows Excel.
+The historical and context example workbooks use this function. Running the
+worksheets requires Windows Excel.

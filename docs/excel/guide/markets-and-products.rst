@@ -1,18 +1,20 @@
 Markets, instruments and pricing conventions
 ============================================
 
-Start every market with ``QS.CONTEXT.CREATE``. Its quote store reference date
-is the valuation date. Base currency/index and quote side govern native market
-construction. Additions belong to that stable root. Evaluation commits the complete
-definition pass and lazily constructs only its required dependencies on workers.
+Start every market with ``QS.CONTEXT.CREATE``. The context's quote reference
+date is the valuation date. The base currency, base index and quote side
+control how curves are built. Each ``QS.CONTEXT.ADD.*`` formula refers to the
+context cell and adds data to that context. When you evaluate, the add-in
+builds only the parts of the market that the evaluation needs.
 
 Bootstrapped and explicit curves
 --------------------------------
 
-Use independent identifier and quote arrays for bootstrapping. Mid/Bid/Ask
-fields may have different locations and orientations; they must align by entry
-count. A missing selected side is an error. Construction uses quote identifier
-conventions from the Rust library, including the product, index and tenor.
+To bootstrap a curve, pass the quote identifiers and values as separate ranges.
+Mid, Bid and Ask ranges can be in different places and orientations, but must
+have the same number of entries. Requesting a quote side that is missing is an
+error. The quote identifiers follow the Rust library's naming conventions,
+which encode the product, index and tenor.
 
 .. code-block:: text
 
@@ -20,29 +22,34 @@ conventions from the Rust library, including the product, index and tenor.
    B3 =QS.CONTEXT.ADD.CURVE(B2,"SOFR",A10:A20,F10:F20)
    B4 =B2
 
-When identifiers and values are already supplied through ADD.QUOTES, omit them
-in ADD.CURVE to select matching market-index quotes. Matching is deterministic.
-Duplicate curve indices or quote sides fail explicitly rather than overwriting
-an unrelated contribution.
+If you already added the quotes with ``ADD.QUOTES``, leave the identifier and
+value arguments of ``ADD.CURVE`` empty. The curve then uses the context's quotes
+for that index, and always selects the same ones. Adding the same curve index or
+quote side twice is an error; the second addition does not replace the first.
 
-Explicit zero curves accept separate ordered pillar and rate arrays:
+For an explicit zero curve, pass the pillars and rates as separate ordered
+ranges:
 
 .. code-block:: text
 
    =QS.CONTEXT.ADD.ZERO.CURVE(B2,"SOFR",A30:A34,F30:F34,"Actual360","Linear",TRUE,"Continuous","Annual")
    =QS.CONTEXT.ADD.COMPOSITE.CURVE(B2,"OTHER:FUNDING","SOFR","OTHER:FUNDINGSPREAD")
 
-Pillars can be ISO date text or tenors such as 0D, 1Y and 10Y. Rates are annual
-decimals under the specified compounding and frequency. The zero curve is a
-construction configuration, so snapshots can rebuild it at a different market
-reference date. A composite multiplies the discount factors of its base and
-spread curves. FUNDING is an ordinary index, selected through a policy rather
-than through contractual loan settings.
+- Pillars can be ISO dates or tenors such as 0D, 1Y and 10Y.
+- Rates are annual decimals with the given compounding and frequency.
+- The zero curve is stored as a curve definition. A snapshot can therefore
+  rebuild it for a different market date.
+- A composite curve multiplies the discount factors of its base curve and its
+  spread curve.
+- FUNDING is an ordinary curve index. Select it with a discount policy, not
+  through the loan's contract settings.
 
-``QS.CURVE.GET`` obtains a curve from a committed context. Use DISCOUNT,
-ZERO.RATE, FORWARD and TABLE under the same namespace to inspect it. The table
-shows pillar dates, discount factors, zero rates and forwards. Default displayed
-rates use Simple/Annual and the native curve day count. Extrapolation is explicit.
+``QS.CURVE.GET`` returns a curve from a context. Use ``DISCOUNT``,
+``ZERO.RATE``, ``FORWARD`` and ``TABLE`` in the same ``QS.CURVE.*`` namespace to
+inspect it. The table shows pillar dates, discount factors, zero rates and
+forward rates. Displayed rates default to Simple/Annual with the curve's own day
+count. A curve is evaluated outside its pillars only if it was added with
+``extrapolate`` set to TRUE.
 
 Fixings, FX, credit and volatility
 ----------------------------------
@@ -55,26 +62,28 @@ Fixings, FX, credit and volatility
    =QS.CONTEXT.ADD.VOL.SURFACE(B2,"SOFR","Black","Strike",A80:A90,F80:F90)
    =QS.CONTEXT.ADD.VOL.CUBE(B2,"SOFR","Black","Strike",A100:A110,F100:F110)
 
-Fixing arrays are market index, ISO fixing date and finite value. Values retain
-the index's native units. FX arrays are base currency, quote currency and
-positive rate, expressed as quote units per base unit. Credit curves calibrate
-survival from CDS identifiers with explicit recovery and discount assumptions.
-Black volatility is annualized decimal volatility; Normal volatility uses rate
-or price units per square-root year. The quote identifiers and configuration
-must agree on that convention.
+- **Fixings**: market index, ISO fixing date and value. Values are in the
+  index's own units.
+- **FX**: base currency, quote currency and a positive rate, in quote-currency
+  units per one unit of base currency.
+- **Credit curves** are calibrated from CDS quote identifiers, with the
+  recovery rate and discounting you specify.
+- **Black volatility** is annualized, in decimals. **Normal volatility** is in
+  rate or price units per square root of a year. The quote identifiers and the
+  configuration must use the same convention.
 
-Volatility surface/cube requests use the corresponding context data. Model and
-pricer configurations can be attached with ADD.SIMULATION.CONFIGURATION and
-ADD.PRICER.CONFIGURATION using individual native JSON objects, preserving typed
-Rust model assignments without a worksheet key/value table.
+Volatility surfaces and cubes use the matching data in the context. To attach
+model and pricer settings, use ``ADD.SIMULATION.CONFIGURATION`` and
+``ADD.PRICER.CONFIGURATION``. Each takes one JSON object in the Rust library's
+format.
 
 Keep contracts separate from positions
 --------------------------------------
 
-``QS.INSTRUMENT.*`` follows native product families. Fixed income uses
-FIXED.RATE.BOND, FIXED.RATE.DEPOSIT and FLOATING.RATE.NOTE; rate futures use
-RATE.FUTURES. Construct a position with ``QS.TRADE.CREATE``. Product-specific
-trade shortcuts have been removed.
+The ``QS.INSTRUMENT.*`` functions follow the product families of the Rust
+library. Fixed income uses ``FIXED.RATE.BOND``, ``FIXED.RATE.DEPOSIT`` and
+``FLOATING.RATE.NOTE``. Rate futures use ``RATE.FUTURES``. Create the position
+with ``QS.TRADE.CREATE``.
 
 .. code-block:: text
 
@@ -82,18 +91,19 @@ trade shortcuts have been removed.
    D3 =QS.TRADE.CREATE("position",B2,D2,"2026-01-15","Receive",1000000)
    D4 =QS.EVALUATE(B4,D3,"Value")
 
-The native FX carry convention depends on the selected pricer. FX outrights are
-quote currency per base unit; quote points are raw forward-minus-spot amounts,
-not automatically pip-scaled. Equity indices use identifiers such as EQ:SPX.
-Futures contract size is currency per price point, not per basis point.
+- How FX carry is treated depends on the selected pricer.
+- FX outright rates are quote currency per unit of base currency.
+- FX forward points are the raw forward minus spot. They are not scaled to pips.
+- Equity indices use identifiers such as ``EQ:SPX``.
+- Futures contract size is in currency per price point, not per basis point.
 
-Relative dates and pending trades
----------------------------------
+Relative dates
+--------------
 
-``QS.INSTRUMENT.*`` functions have separate tenor arguments. Leave an absolute
-date blank when supplying its tenor alternative. Instrument and trade handles
-take a required construction context immediately after the name. Construction
-calculates concrete dates before publishing a product handle.
+Most date arguments of ``QS.INSTRUMENT.*`` have a matching tenor argument. To
+use a tenor, leave the date blank and supply the tenor. Instrument and trade
+functions take the context right after the name; it is used to turn tenors into
+dates.
 
 .. code-block:: text
 
@@ -101,16 +111,27 @@ calculates concrete dates before publishing a product handle.
    D3 =QS.TRADE.CREATE("position",B2,D2,"","Receive",1000000)
    D4 =QS.EVALUATE(B4,D3,"Value")
 
-Scheduled products use ``start_tenor`` and ``tenor``; options use
-``expiry_tenor`` and forwards use ``delivery_tenor``. ``QS.TRADE.CREATE`` also
-accepts ``trade_tenor``. A blank execution date and blank tenor default to
-``0D`` in the construction context. The resulting dates and initial principal
-remain fixed during valuation; constructor recalculation creates a new contract.
+- Scheduled products use ``start_tenor`` and ``tenor``.
+- Options use ``expiry_tenor``; forwards use ``delivery_tenor``.
+- ``QS.TRADE.CREATE`` accepts ``trade_tenor``.
+- If both the date and the tenor are blank, the tenor is ``0D`` from the
+  context date.
 
-``QS.CONTEXT.CREATE`` appends ``anchor_fixings`` (TRUE by default). TRUE
-requires stored index fixings strictly before evaluation, raising an error
-when one is missing; today and future observations project. FALSE projects
-all index observations, subject to the curve's supported date range.
+The dates and initial principal are fixed when the instrument is created. They
+do not move during valuation. If the instrument formula recalculates, it
+creates a new contract.
+
+Historical fixings
+~~~~~~~~~~~~~~~~~~
+
+``QS.CONTEXT.CREATE`` has a final ``anchor_fixings`` argument (TRUE by
+default).
+
+- **TRUE**: index fixings before the valuation date must be stored in the
+  context. A missing past fixing is an error. Fixings on or after the
+  valuation date are projected from the curve.
+- **FALSE**: all index fixings are projected from the curve, within the
+  curve's supported date range.
 
 Policies and explicit model choices
 -----------------------------------
@@ -122,20 +143,28 @@ Policies and explicit model choices
    L5 =QS.PRICER.CREATE("swaption","ClosedFormHullWhiteSwaptionPricer",L3,AC30:AC31,AD30:AD31)
    L6 =QS.DISCOUNT.POLICY.FIXED.INCOME("fixed.income",A120:A122,F120:F122)
 
-Pricer settings are independent name/value arrays. For Hull-White alpha and
-sigma, put setting names in AC30:AC31 and values in AD30:AD31. The explicit
-swaption pricer requires its model parameters. RateFuturesPricer does not use a
-discount policy and rejects one. Fixed-income policies map currencies to curve
-indices and can optionally prefer an instrument's discount index.
+- Pricer settings are passed as a range of names and a range of values. For
+  Hull-White alpha and sigma, put the setting names in AC30:AC31 and their
+  values in AD30:AD31.
+- The swaption pricer requires its model parameters.
+- ``RateFuturesPricer`` does not use a discount policy. Passing one is an
+  error.
+- A fixed-income policy maps each currency to a curve index. It can optionally
+  prefer the instrument's own discount index.
 
-Bonds require CleanPrice, DirtyPrice or ZSpread plus an anchor value on the
-trade. Clean/dirty anchors use quotation units, while PV is monetary. Use native
-requests YieldToMaturity, ModifiedDuration and ZSpread as supported by the
-selected pricer. Straight exposed bond constructors do not supply callable
-exercise terms for OAS, and BondPricer does not define FairRate.
+Bonds
+~~~~~
 
-The editable swap, bond and loan workbooks explain conventions next to each
-input. The generated worksheet reference is authoritative for argument order,
-optional defaults and native errors. Unsupported products and pricers fail
-explicitly; the worksheet API does not register custom scripted products or an
-exposure/XVA engine.
+- A bond trade needs an anchor type (``CleanPrice``, ``DirtyPrice`` or
+  ``ZSpread``) and an anchor value.
+- Clean and dirty prices are in quotation units. PV is a money amount.
+- Supported requests include ``YieldToMaturity``, ``ModifiedDuration`` and
+  ``ZSpread``, depending on the pricer.
+- The bond functions do not include call schedules, so they cannot be used for
+  OAS. ``BondPricer`` does not support ``FairRate``.
+
+The swap, bond and loan example workbooks explain the conventions next to each
+input. The generated worksheet reference is the authority on argument order,
+defaults and errors. Unsupported products and pricers return an error. The
+worksheet functions do not include custom scripted products or an exposure/XVA
+engine.

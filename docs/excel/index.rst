@@ -4,10 +4,10 @@ Excel
 `Download the Excel add-in and IntelliSense ZIP for 64-bit Windows Excel <https://jmelo11.github.io/quantsupport-excel/downloads/quantsupport-excel-windows-x64.zip>`_
 or the `standalone quantsupport.xll <https://jmelo11.github.io/quantsupport-excel/downloads/quantsupport.xll>`_.
 
-Every function has a separate declaration page with ordered parameters,
-worksheet input types, blank/default behavior, results, errors, aliases, and
-a link to its Rust implementation. Formula names and parameter order are taken
-from the add-in's registration attributes, including macro-generated functions.
+Every function has its own reference page. It lists the arguments in order,
+their input types, what happens when an argument is blank, the result, the
+errors, any aliases, and a link to the Rust source. The pages are generated from
+the add-in's source code, so names and argument order match what Excel shows.
 
 .. toctree::
    :maxdepth: 2
@@ -18,22 +18,30 @@ from the add-in's registration attributes, including macro-generated functions.
 Handles and calculation
 -----------------------
 
-Object constructors return revisioned text handles, such as
-``QSObject:QuoteStore:usd_quotes:3``. These are owned by the add-in and valid
-only in the current Excel process/calculation thread. Changed inputs advance
-the revision; readers reject stale handles, while mutation chains can accept
-older revisions of the same object identity. Optional cells may be blank only where the
-parameter description permits it.
+Functions that create objects return a text **handle**, such as
+``QSObject:PricingContext:usd:4``. Pass this cell to other functions to use the
+object.
 
-Pure date, schedule, and interpolation queries may be thread-safe and can return
-scalars or spills. Functions that access the object registry
-run on Excel's main calculation thread. Each function page states its registration
-mode. ``#VALUE!`` reports invalid inputs or failed construction/evaluation;
-``#N/A`` is used by queries when a requested result is absent, as specified on
-the individual page.
+- A handle is valid only in the Excel session that created it. Reopening a
+  workbook recreates its objects.
+- The last number is a revision. It increases when the object's inputs change.
+- A function given an out-of-date handle returns an error.
+- Leave an optional argument blank only where its description allows it.
 
-Excel for macOS and Excel in the browser cannot load the XLL. Installation,
-formula composition, and a complete valuation are explained locally in
-:doc:`guide/workbook`. The
-`binding README <https://github.com/jmelo11/quantsupport-excel/blob/main/README.md>`_
-provides an additional developer entry point.
+Calculation threads:
+
+- Date, schedule and interpolation functions do not use stored objects. Excel
+  can run them on several threads, and they return single values or spills.
+- Functions that use stored objects run on Excel's main calculation thread.
+- Each function page states which kind it is.
+
+Errors:
+
+- ``#VALUE!`` means an invalid input, or that building or evaluating an object
+  failed.
+- ``#N/A`` means a query found no result, as described on each function page.
+
+Excel for macOS and Excel in the browser cannot load the XLL.
+:doc:`guide/workbook` explains installation, how to write the formulas and a
+complete valuation. Developers can also start from the
+`binding README <https://github.com/jmelo11/quantsupport-excel/blob/main/README.md>`_.

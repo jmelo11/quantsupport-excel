@@ -1,8 +1,8 @@
 # Working in Excel
 
-A workbook supplies dated market inputs, defines contracts and trades, and
-requests values from the native pricing engine. Both matching XLLs must be
-loaded. Start with the [installation instructions](installation.md) and the
+A pricing workbook holds dated market inputs, defines contracts and trades,
+and asks the add-in for values. Both matching XLLs must be loaded. Start with
+the [installation instructions](installation.md) and the
 [complete workbook guide](guide/workbook.rst).
 
 ## Create a market and position
@@ -20,29 +20,35 @@ D5 =QS.EVALUATE(B2,D3,"Cashflows")
 D6 =QS.EVALUATE(B2,D3,"Sensitivities")
 ```
 
-Each addition references the same root context. The engine commits cell-owned
-contributions and constructs dependencies on demand. Editing or clearing an
-addition invalidates consumers of that context. Quote arrays must contain the
-market observations needed by the selected curve configuration.
-
-A contract describes its terms; a trade adds execution date, side and position
-size. Direct evaluation returns the requested scalar or table. Use
-`QS.EVALUATE.RESULTS` when several measures should share a stored result.
+- B2 creates the context. Each `QS.CONTEXT.ADD.*` formula refers to B2 and adds
+  market data to it.
+- The quotes must include every observation the SOFR curve needs.
+- When you edit or clear an addition, every formula that uses B2 recalculates.
+- D2 holds the contract terms. D3 adds the trade date, side and position size.
+- `QS.EVALUATE` returns the requested number or table. Use
+  `QS.EVALUATE.RESULTS` to store several measures from one valuation.
 
 ## Calculation and interpretation
 
-While a background request is pending its cells show `#N/A`. Automatic mode
-receives completed results through RTD. In Manual mode use **Refresh Pricing**;
-F9 and Excel's calculation status do not await background work. Automation uses
-`tools/excel/examples/async_excel.py` to await explicit completion.
+Pricing runs in the background.
 
-Handles belong to the current workbook session. Reopening a workbook rebuilds
-its native objects. Unchanged inputs reuse ready results; failed contributions
-produce diagnostics in the object browser.
+- Cells show `#N/A` while their result is pending.
+- In Automatic mode, results appear when they are ready.
+- In Manual mode, click **Refresh Pricing**. Pressing F9 does not wait for
+  background work, and Excel's calculation status does not show it.
+- Automation scripts can wait for completion with
+  `tools/excel/examples/async_excel.py`.
 
-Rates and spreads use annual decimals. Sensitivities are derivatives per unit
-input; multiplying a decimal-rate derivative by `0.0001` estimates a one-basis-
-point change. Cashflows retain their currencies and contractual conventions.
+Objects belong to the current Excel session. Reopening a workbook rebuilds
+them. Recalculating without changes reuses finished results. Failed additions
+show their error in the object browser.
+
+Units:
+
+- Rates and spreads are annual decimals.
+- Sensitivities are derivatives per unit change in each input. Multiply a
+  decimal-rate sensitivity by `0.0001` to estimate a one-basis-point change.
+- Cashflows keep their own currencies and contractual conventions.
 
 Continue with [contexts and evaluation](guide/context-first.rst),
 [markets and products](guide/markets-and-products.rst), or

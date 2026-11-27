@@ -1,37 +1,43 @@
 # QuantSupport Excel add-in
 
-The add-in connects worksheet arrays to the Rust library's contexts, instruments,
-trades, policies, pricers and evaluation results. It requires **64-bit Windows
-desktop Excel**. Excel for macOS and the browser cannot load the XLL.
+QuantSupport for Excel lets you price trades from worksheet formulas. You enter
+market quotes in cells, build a dated market from them, define instruments and
+trades, and request values, cashflows and sensitivities. The pricing itself is
+done by the QuantSupport Rust library.
 
-## Install and build
+**Requirements:**
 
-Extract the complete [Excel ZIP](https://jmelo11.github.io/quantsupport-excel/downloads/quantsupport-excel-windows-x64.zip)
-into a stable folder. In **File > Options > Add-ins > Excel Add-ins > Go > Browse**,
-load `quantsupport.xll`, `QuantSupport.Ribbon64.xll` and
-`ExcelDna.IntelliSense64.xll` from that folder. Keep the generated
-`quantsupport.intellisense.xml` alongside them. The companions require .NET
-Framework 4.6.2 or later. Restart Excel after installation.
+- 64-bit Windows desktop Excel. Excel for macOS and Excel in the browser cannot
+  load the add-in.
+- .NET Framework 4.6.2 or later, for the ribbon and IntelliSense companions.
 
-To build on Windows, install stable Rust for 64-bit MSVC, Visual Studio Build
-Tools and .NET SDK 8 or later, then run:
+## Install
 
-```powershell
-rustup target add x86_64-pc-windows-msvc
-powershell -ExecutionPolicy Bypass -File tools/excel/build.ps1
-```
+1. Download the complete [Excel ZIP](https://jmelo11.github.io/quantsupport-excel/downloads/quantsupport-excel-windows-x64.zip)
+   and extract all files into a stable folder.
+2. In Excel, open **File > Options > Add-ins > Excel Add-ins > Go > Browse**.
+3. Load these three files from that folder:
+   - `quantsupport.xll` (the worksheet functions)
+   - `QuantSupport.Ribbon64.xll` (the ribbon, panel and background results)
+   - `ExcelDna.IntelliSense64.xll` (argument hints while typing)
+4. Keep `quantsupport.intellisense.xml` in the same folder.
+5. Restart Excel.
 
-The distribution is written to `dist`. Use workbooks and XLLs
-from the same build. Load the add-in before opening a workbook; use
-**Ctrl+Alt+F9** after replacing an older build.
+Use workbooks and add-ins from the same build. Load the add-in before you open a
+workbook. If you replace the add-in with a newer build, press **Ctrl+Alt+F9** to
+rebuild every formula.
 
-## One context workflow
+## Your first workbook
 
-`QS.CONTEXT.CREATE` owns the quote, fixing and FX stores and construction
-settings. Each `QS.CONTEXT.ADD.*` formula defines one independent contribution.
-Every contribution references the same stable root cell. Evaluation commits the
-cell-owned definitions after calculation settles and builds dependencies lazily
-on context-affine Rust workers.
+A pricing workbook has three parts:
+
+1. A **context**: the market for one valuation date. It holds quotes, fixings,
+   FX rates and curve settings.
+2. An **instrument** (the contract terms) and a **trade** (your position in it:
+   trade date, side and size).
+3. An **evaluation** that prices the trade in the context.
+
+This example values a six-month USD deposit:
 
 ```text
 B2 =QS.CONTEXT.CREATE("usd","2026-01-15","USD","SOFR")
@@ -45,13 +51,18 @@ D6 =QS.EVALUATE.RESULTS(B2,D3,{"Value","Cashflows","Sensitivities"})
 D7 =QS.RESULT.VALUE(D6)
 ```
 
-Editing, replacing or deleting an addition invalidates the context's registered
-consumers, including formulas whose arguments contain only the stable root.
-A failed addition leaves a source diagnostic and an invalid market. Duplicate
-quote sides, fixings and configurations fail explicitly; separate Mid/Bid/Ask
-contributions merge. Unchanged recalculation preserves additions and ready results.
+- B2 creates the context. Its date, 2026-01-15, is the valuation date.
+- B3 and B4 add a quote and a SOFR curve to that context. Every
+  `QS.CONTEXT.ADD.*` formula refers to the context cell (B2) and adds one piece
+  of market data.
+- D2 defines the deposit and D3 makes it a receive position.
+- D4 and D5 return the value and the cashflow table.
+- D6 stores several results at once. D7 reads the value from it.
 
-Use separate arrays for fields, in any row or column orientation:
+### Adding market data from ranges
+
+You can add many quotes, fixings or FX rates with one formula. Pass each field
+as its own range:
 
 ```text
 =QS.CONTEXT.ADD.QUOTES(B2,A10:A20,TRANSPOSE(F10:F20),G10:G20,H10:H20)
@@ -60,53 +71,74 @@ Use separate arrays for fields, in any row or column orientation:
 =QS.CONTEXT.ADD.CURVE(B2,"SOFR",A10:A20,F10:F20)
 ```
 
-Arrays must have equal entry counts. Interior blanks retain their positions;
-omitted quote sides stay absent. Fields may be nonadjacent. No rectangular
-input table, Excel Table object or header row is required.
+- Each range can be a row or a column, and the ranges do not need to be next to
+  each other. Do not include header cells.
+- All ranges in one formula must have the same number of entries.
+- A blank cell inside a range keeps its position.
+- If you omit a quote side (for example Bid or Ask), that side has no value.
 
-The context has additions for bootstrapped, zero-rate and composite curves,
-credit curves, volatility surfaces/cubes and native model/pricer configurations.
-`QS.CONTEXT.QUOTE` and `QS.CONTEXT.FIXING` inspect a committed context.
+The context also accepts zero-rate and composite curves, credit curves,
+volatility surfaces and cubes, and model and pricer configurations. Use
+`QS.CONTEXT.QUOTE` and `QS.CONTEXT.FIXING` to read back values from a context.
 
-## Evaluate consistently
+### Editing market data
 
-Both `quantsupport.xll` and its matching `QuantSupport.Ribbon64.xll` companion
-are required for background delivery. Scalar and spilled outputs return `#N/A`
-while pending; source diagnostics appear in the browser. Errors remain typed
-Excel errors. Stored results are revisioned opaque IDs; native objects and AD
-tapes stay on their owner worker.
+- When you edit, replace or delete a `QS.CONTEXT.ADD.*` formula, every formula
+  that uses the context recalculates. This includes formulas that refer only to
+  the context cell.
+- If an addition fails, the market is marked invalid. The error and its source
+  cell appear in the object browser.
+- Adding the same quote side, fixing or configuration twice is an error.
+  Separate Mid, Bid and Ask additions for the same quote are combined.
+- Recalculating without changes keeps existing market data and finished results.
 
-Automatic mode updates through Excel-DNA RTD. In Manual mode use the ribbon's
-**Refresh Pricing** action to await jobs and refresh dependent worksheet stages.
-F9 starts work but is not an asynchronous completion barrier. Automation can use
-`tools/excel/examples/async_excel.py`; `QS.ENGINE.STATUS()` reports `pending`, `pending_delivery`, `settled`, errors
-and stage metrics. Excel's `CalculationState` alone does not indicate completion.
-The application-wide RTD throttle is preserved (typically 2,000 ms).
+## How results are calculated
 
-This release removes the prepare function and the evaluation `inputs` argument.
-Use matching XLLs and workbooks. `tools/excel/examples/migrate_async_api.py` updates old
-example formulas while preserving their workbook layout.
+Pricing runs in the background so that Excel stays responsive. Both
+`quantsupport.xll` and `QuantSupport.Ribbon64.xll` must be loaded for results to
+reach the worksheet.
 
-The bounded pool defaults to at most eight workers; `QS_ENGINE_WORKERS` can set
-1–32 workers before Excel starts. There is no service or additional runtime.
-Close/reset cancels subscriptions and retires worker registries asynchronously.
-The executing native module remains mapped until Excel exits so noninterruptible
-native calls can finish safely after add-in unload.
+- A cell shows `#N/A` while its result is pending.
+- In **Automatic** calculation mode, results appear in the cells when they are
+  ready.
+- In **Manual** calculation mode, click **QuantSupport > Refresh Pricing**. It
+  waits for pending work and refreshes dependent cells. Pressing F9 starts the
+  work but does not wait for it to finish.
+- Errors show as normal Excel errors (for example `#VALUE!`). The error message
+  and its source cell appear in the object browser.
+
+Excel's `CalculationState` does not show whether background pricing has
+finished. For automation scripts, use `tools/excel/examples/async_excel.py`, or
+read `QS.ENGINE.STATUS()`. It reports `pending`, `pending_delivery`, `settled`,
+errors and timing for each stage.
+
+The add-in keeps Excel's application-wide RTD throttle setting (typically
+2,000 ms). By default it uses up to eight pricing threads. To change this, set
+the `QS_ENGINE_WORKERS` environment variable to a value from 1 to 32 before you
+start Excel.
+
+## Evaluation functions
 
 | Function | Result |
 | --- | --- |
-| `QS.EVALUATE` | One requested scalar or cashflow/sensitivity spill |
-| `QS.EVALUATE.RANGE` | One context or paired context/trade arrays; parallel dated markets and one scalar per row |
-| `QS.EVALUATE.RESULTS` | One reusable native result handle for request arrays |
-| `QS.EVALUATE.PORTFOLIO` | Aggregated native result handle from a portfolio |
-| `QS.EVALUATE.FROM.SNAPSHOT` | Historical scalar batch at aligned timestamps |
+| `QS.EVALUATE` | One value, or a cashflow or sensitivity table |
+| `QS.EVALUATE.RANGE` | One value per trade, priced in parallel. Pass one context, or a range of contexts paired row by row with the trades |
+| `QS.EVALUATE.RESULTS` | A stored result with several measures; read it with the `QS.RESULT.*` functions |
+| `QS.EVALUATE.PORTFOLIO` | A stored result combining all trades in a portfolio |
+| `QS.EVALUATE.FROM.SNAPSHOT` | One value per trade from historical markets, each at its own timestamp |
 
-Direct evaluation takes **context, instrument/trade, request, pricer,
-policy**, then output-layout flags. Request defaults to Value. A blank pricer
-selects the native product pricer. A blank policy selects the context's base
-curve policy. To choose funding or model parameters explicitly, construct a
-policy and pricer once and pass the pricer. Its policy is already configured;
-passing both an explicit pricer and a separate policy is an error.
+`QS.EVALUATE` takes its arguments in this order: **context, instrument or trade,
+request, pricer, policy**, then optional layout flags.
+
+- **Request** defaults to `Value`.
+- **Pricer**: leave it blank to use the standard pricer for the product.
+- **Policy** chooses discount curves. Leave it blank to use the context's base
+  curve.
+
+To control funding curves or model parameters, create a policy, create a pricer
+with that policy, and pass the pricer. The pricer already contains its policy,
+so leave the policy argument blank. Passing both a pricer and a separate policy
+is an error.
 
 ```text
 =QS.DISCOUNT.POLICY.CSA("csa","USD","SOFR")
@@ -118,58 +150,152 @@ passing both an explicit pricer and a separate policy is an error.
 =QS.EVALUATE.PORTFOLIO(context,portfolio,pricer,requests,"USD")
 ```
 
-Contracts passed directly to evaluation use Receive, their own notional and the
-context date. Use `QS.TRADE.CREATE` for explicit side/date/quantity and required
-bond anchors. Swaptions require an explicitly configured pricer. FairRate(index)
-selects one zero-based swap leg or loan segment; use separate evaluations for
-multiple targets. Sensitivities are raw derivatives per unit factor change;
-for decimal rates, multiplying by `0.0001` estimates a +1 bp move.
-Table results accept trailing `transpose` and `headers` flags (FALSE and TRUE).
-List results accept only `transpose`.
+Conventions:
 
-## Snapshots and historical pricing
+- If you pass an instrument directly, it is valued as a Receive position, with
+  its own notional, traded on the context date.
+- Use `QS.TRADE.CREATE` to set the side, trade date or quantity. Bonds need a
+  trade with a price or spread anchor.
+- Swaptions need an explicitly configured pricer.
+- `FairRate(index)` solves for one swap leg or loan segment. The index starts
+  at 0. Use a separate evaluation for each leg or segment.
+- Sensitivities are raw derivatives per unit change in each market input. For
+  rates in decimals, multiply by `0.0001` to estimate the effect of a +1 bp move.
+- Table results accept two optional flags at the end: `transpose` (default
+  FALSE) and `headers` (default TRUE). List results accept only `transpose`.
 
-Prepare each complete dated context, then archive independent context and
-offset-aware observation-timestamp arrays:
+## Historical pricing with snapshots
+
+To price trades on past dates, build one complete context per market date. Then
+archive them in a snapshot together with their observation timestamps:
 
 ```text
 =QS.SNAPSHOT.FROM.RANGE("history",contexts,timestamps)
 =QS.EVALUATE.FROM.SNAPSHOT(history,trades,dates,pricer,"Value")
 ```
 
-Each trade has one RFC 3339 timestamp, such as `2026-01-15T16:00:00Z`.
-Defaults are Previous/Mid: the latest complete market at or before the request
-is used. Exact and Closest are available; Closest may select a future market.
-The selected quote reference date remains the valuation date. Missing Bid/Ask
-never falls back to Mid. Snapshot archives preserve construction inputs, and
-exclude runtime curves and fixing vintages. Supply a shared fixing contribution
-or committed context in the optional `fixings` argument.
+- Each trade has one RFC 3339 timestamp with a time zone, such as
+  `2026-01-15T16:00:00Z`.
+- By default the add-in uses the latest complete market at or before each
+  timestamp (`Previous`), with Mid quotes.
+- `Exact` and `Closest` are also available. `Closest` may pick a later market.
+- The valuation date is the selected market's date, not the requested timestamp.
+- A missing Bid or Ask quote is an error. It is not replaced by Mid.
+- Snapshots keep the market inputs and curve settings. They do not keep built
+  curves or fixing history. Pass fixings in the optional `fixings` argument,
+  either as a fixing addition or as a context.
 
-The batch groups requests by matched snapshot and constructs each market once.
-It returns scalar values in input order without storing per-row evaluation
-objects. Evaluation completes synchronously during Excel calculation.
+Each market is built once and shared by all trades that use it. The function
+returns one value per trade, in input order. Historical batches finish during
+Excel's normal calculation; they do not run in the background.
 
 ## Ribbon and panel
 
-The ribbon groups **Market**, **Pricing**, **Workbook**, **Calculation** and
-**Setup & help** actions. Browse contexts and curves, inspect a selected handle,
-or open Pricing for an instrument or trade. The panel uses aligned labeled
-controls, resizable columns, virtual table rows and consistent numeric formatting.
-Ctrl+A/Ctrl+C and the table copy menu include headings.
+The **QuantSupport** ribbon tab has these groups:
 
-Details show financial inputs and dates. Source navigation and Copy handle
-remain available without displaying method traces or dependency dumps. Worksheet
-errors appear with their source cell in the panel; successful recalculation or
-clearing the source removes them. Explicit query errors preserve the library's
-message. Browsing never triggers workbook calculation.
+- **Market**: browse pricing contexts and curves.
+- **Pricing**: browse instruments and trades, or price the selected one.
+- **Workbook**: browse all objects, inspect the selected cell, refresh the
+  browser.
+- **Calculation**: **Refresh Pricing** and **Reset Memory & Rebuild**.
+- **Setup & help**: open the setup guide and function reference.
 
-**Reset Memory & Rebuild** discards native objects and rebuilds all open workbooks,
-including in Manual mode, while preserving the calculation-mode setting.
+In the panel:
 
-## Migration and examples
+- Tables have resizable columns. Ctrl+A and Ctrl+C, and the table's copy menu,
+  copy values with their headings.
+- Details show the financial inputs and dates of an object. **Go to cell** jumps
+  to its formula, and **Copy handle** copies its reference.
+- Worksheet errors appear with their source cell. They disappear when the cell
+  recalculates successfully or is cleared. Query errors show the library's
+  message.
+- Browsing never recalculates the workbook.
 
-This API change deliberately removes overlapping constructors and aliases.
-Migrate older workbooks before using this build:
+**Reset Memory & Rebuild** clears all QuantSupport objects and recalculates
+every open workbook. It works in Manual mode too and keeps your calculation-mode
+setting.
+
+## Examples
+
+[Ready-to-open workbooks](examples/README.md) cover contexts, swaps, history,
+loans, bonds, portfolio aggregation and interpolation. Each workbook opens on a
+**Start Here** tab. The [10,000-valuation example](examples/workbooks/origination_10000_batch.xlsx)
+prices a different swap at each of 10,000 origination dates, each with its own
+dated context.
+
+- Workbooks: `examples/workbooks/`
+- Generators and the benchmark: `tools/excel/examples/`
+- Checks: `examples/tests/`
+
+[The guide](docs/excel/guide/index.rst) explains the financial conventions. The
+[generated reference](https://jmelo11.github.io/quantsupport-excel/excel/functions/index.html)
+lists the exact signature of every function.
+
+## Building and testing
+
+To build on Windows, install stable Rust for 64-bit MSVC, Visual Studio Build
+Tools and .NET SDK 8 or later. Then run:
+
+```powershell
+rustup target add x86_64-pc-windows-msvc
+powershell -ExecutionPolicy Bypass -File tools/excel/build.ps1
+```
+
+The build writes the add-in files to `dist`.
+
+To regenerate the example workbooks and run the portable tests (any platform):
+
+```sh
+python -m pip install -r examples/requirements.txt
+python tools/excel/examples/create_examples.py
+cargo test -p quantsupport-xll --lib --example function_catalog
+python -m unittest discover -s examples/tests -p 'test_*.py'
+```
+
+The portable tests check market construction, object updates, historical
+batches and workbook formulas. Loading the add-in in Excel and the panel's
+behavior can only be checked on Windows. Use the Windows smoke and lifecycle
+tests with matching XLLs. These need pywin32 and the `QS_XLL_PATH` environment
+variable.
+
+See [Build the Excel documentation](docs/README.md) to build the documentation
+site. Financial concepts are explained in the
+[QuantSupport Book](https://jmelo11.github.io/quantsupport/).
+
+## Releases (maintainers)
+
+This repository uses the core Rust library at the exact Git revision set in
+`Cargo.toml`. Building, releasing and publishing documentation all run from
+this repository.
+
+To use a newer core revision:
+
+1. Update `dependencies.quantsupport.rev` in `Cargo.toml`.
+2. Run `cargo update -p quantsupport`.
+3. If the core change adds APIs you want in Excel, add the worksheet wrappers
+   and documentation.
+4. Run this repository's checks.
+5. Commit `Cargo.toml` and `Cargo.lock` together and merge.
+
+The binding version is in `[workspace.package]` in `Cargo.toml`.
+
+- Each merge to `main` takes the next patch version and builds a release. The
+  signed release commit updates both the manifest and the lockfile.
+- Add `[skip release]` to the commit message for documentation-only changes.
+  Add `[release]` to force a release.
+- GitHub Pages must be set to deploy from GitHub Actions.
+- If `main` is protected, the signed version commit may need a `RELEASE_TOKEN`
+  secret.
+
+## Migrating older workbooks
+
+Workbooks built for earlier versions use functions that this version does not
+include. Update them using this table. `tools/excel/examples/migrate_async_api.py`
+updates old example formulas and keeps the workbook layout.
+
+Earlier versions also used `QS.CONTEXT.PREPARE` and an `inputs` argument on the
+evaluation functions. Remove both: evaluation reads the context's additions
+directly.
 
 | Previous API | Replacement |
 | --- | --- |
@@ -181,45 +307,3 @@ Migrate older workbooks before using this build:
 | `QS.SNAPSHOTS.*` | Singular `QS.SNAPSHOT.*`; archive construction is `.ARCHIVE` |
 | Product trade constructors and direct pricing/risk shortcuts | `QS.INSTRUMENT.*`, `QS.TRADE.CREATE`, evaluation requests |
 | Fixed bond/deposit and floating note names | `FIXED.RATE.BOND`, `FIXED.RATE.DEPOSIT`, `FLOATING.RATE.NOTE` |
-
-[Ready-to-open workbooks](examples/README.md) cover contexts, swaps, history,
-loans, bonds, portfolio aggregation and interpolation. The
-[10,000-valuation example](examples/workbooks/origination_10000_batch.xlsx)
-prices a different swap at each of 10,000 origination dates using 10,000 dated
-contexts. Workbooks live in `examples/workbooks/`, generators and the benchmark
-in the repository's `tools/excel/examples/`, and checks in `examples/tests/`.
-Each workbook opens on Start Here.
-[The guide](docs/excel/guide/index.rst) explains the financial conventions;
-the [generated reference](https://jmelo11.github.io/quantsupport-excel/excel/functions/index.html)
-lists exact native signatures.
-
-```sh
-python -m pip install -r examples/requirements.txt
-python tools/excel/examples/create_examples.py
-cargo test -p quantsupport-xll --lib --example function_catalog
-python -m unittest discover -s examples/tests -p 'test_*.py'
-```
-
-Windows lifecycle tests require pywin32 and `QS_XLL_PATH`. Portable tests verify
-market construction, revision/lifetime handling, historical batches and workbook
-formulas. Live Excel loading and panel behavior require the Windows smoke and
-lifecycle checks with the matching XLLs.
-
-## Independent development and releases
-
-This repository consumes the core Rust library at the exact Git revision in
-`Cargo.toml`. Its build, release and documentation workflows run here; the Rust
-repository neither invokes nor waits for them. A sibling core checkout is not
-required. To adopt a core change, update `dependencies.quantsupport.rev`, run
-`cargo update -p quantsupport`, then run this repository's checks and merge.
-Commit the updated `Cargo.lock` alongside the manifest.
-New Rust APIs also require wrapper and documentation changes here.
-
-The binding version lives in `[workspace.package]` in this repository's
-`Cargo.toml`. Merging to `main` reserves the next patch version and builds a
-release. Use `[skip release]` for documentation-only changes and `[release]`
-to override it. Configure GitHub Pages to use GitHub Actions. The signed release
-commit updates both the manifest and lockfile. A protected main branch may need `RELEASE_TOKEN` for the signed version commit.
-
-Build the [documentation](docs/README.md) independently. Core financial concepts
-remain in the [QuantSupport Book](https://jmelo11.github.io/quantsupport/).

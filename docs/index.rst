@@ -3,9 +3,10 @@ QuantSupport for Excel
 
 Binding version |release| uses core revision |core_revision|.
 
-This site documents the Excel package released from this repository: its
-installation, financial conventions, API, examples and troubleshooting.
-All reference pages are generated from this repository's own declarations.
+This site documents the QuantSupport Excel add-in: how to install it, the
+financial conventions it uses, every worksheet function, the example workbooks
+and troubleshooting. The function reference is generated from the add-in's
+source code.
 
 .. toctree::
    :maxdepth: 2

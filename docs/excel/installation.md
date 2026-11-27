@@ -6,10 +6,11 @@ Excel](https://jmelo11.github.io/quantsupport-excel/downloads/quantsupport-excel
 The ZIP includes `quantsupport.xll`, its matching XML metadata,
 `ExcelDna.IntelliSense64.xll`, installation instructions and license notices.
 The [standalone XLL](https://jmelo11.github.io/quantsupport-excel/downloads/quantsupport.xll)
-remains available in the same download directory.
+is in the same download directory.
 
-[Release history](https://github.com/jmelo11/quantsupport-excel/releases) provides
-versioned downloads. Excel for macOS and Excel in the browser cannot load an XLL.
+Older versions are available from the
+[release history](https://github.com/jmelo11/quantsupport-excel/releases).
+Excel for macOS and Excel in the browser cannot load an XLL.
 
 1. Extract all files from the ZIP into a stable local folder.
 2. In Excel open **File > Options > Add-ins**.
@@ -23,24 +24,28 @@ The workbook includes pricing, curve tables, cashflows, and sensitivities.
 
 ## Discover functions
 
-`=QS.FUNCTIONS()` lists worksheet names. `=QS.FUNCTIONS.DETAILS()` spills the
-catalog. `=QS.HELP("QS.INSTRUMENT.SWAP")` displays parameter guidance in cells. The
-same help appears in Excel's Function Arguments dialog and the optional
+- `=QS.FUNCTIONS()` lists all function names.
+- `=QS.FUNCTIONS.DETAILS()` spills the full function catalog.
+- `=QS.HELP("QS.INSTRUMENT.SWAP")` shows a function's argument help in cells.
+
+The same help appears in Excel's Function Arguments dialog and in the
 [worksheet
 reference](https://jmelo11.github.io/quantsupport-excel/excel/functions/index.html).
 
-For parameter hints **while typing**, load the ZIP's included
-`ExcelDna.IntelliSense64.xll` alongside QuantSupport and keep the matching
-`quantsupport.intellisense.xml` beside `quantsupport.xll`. Restart Excel with both
-add-ins enabled, then type `=QS.EVALUATE` followed by an opening parenthesis to see its signature and active-argument
-help. The companion requires .NET Framework 4.6.2 or later.
+To see argument hints **while typing**:
 
-Without the companion, type the function name and press **Ctrl+A** for the
-Function Arguments dialog, or **Ctrl+Shift+A** to insert its argument names.
+1. Load `ExcelDna.IntelliSense64.xll` from the ZIP together with QuantSupport.
+2. Keep `quantsupport.intellisense.xml` next to `quantsupport.xll`.
+3. Restart Excel with both add-ins enabled.
+4. Type `=QS.EVALUATE` followed by an opening parenthesis. The signature and
+   help for the current argument appear.
 
-Function names and aliases are public. Registry objects, raw pointers, and Rust
-helper functions are internal. Scalar date functions can run on calculation
-threads; registry and pricing functions run on Excel's main thread.
+The IntelliSense add-in needs .NET Framework 4.6.2 or later. Without it, type
+the function name and press **Ctrl+A** for the Function Arguments dialog, or
+**Ctrl+Shift+A** to insert the argument names.
+
+Date functions can run on several calculation threads. Functions that create or
+price objects run on Excel's main thread.
 
 ## Build from source
 
@@ -52,7 +57,8 @@ rustup target add x86_64-pc-windows-msvc
 powershell -ExecutionPolicy Bypass -File tools/excel/build.ps1
 ```
 
-The build packages `dist/quantsupport-excel-windows-x64.zip`
-and the individual XLL, XML and companion files. It downloads a pinned
+The build creates `dist/quantsupport-excel-windows-x64.zip` and the individual
+XLL, XML and companion files. It downloads a fixed
 [Excel-DNA IntelliSense](https://github.com/Excel-DNA/IntelliSense/releases)
-release and verifies its SHA-256. Keep the files together if moving the add-in.
+release and checks its SHA-256 hash. If you move the add-in, move all the files
+together.

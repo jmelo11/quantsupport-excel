@@ -1,23 +1,31 @@
 Install and build a pricing workbook
 ====================================
 
-The add-in requires 64-bit Windows desktop Excel. Download the complete Excel
-ZIP from the project's download page, extract it into a stable folder and load
-``quantsupport.xll``, ``QuantSupport.Ribbon64.xll`` and
-``ExcelDna.IntelliSense64.xll`` through Excel's Add-ins dialog. Keep
-``quantsupport.intellisense.xml`` alongside the XLLs. The managed companions
-require .NET Framework 4.6.2 or later. Restart Excel after loading them.
+Install the add-in
+------------------
 
-Use workbooks and add-ins from the same release. Old store constructors,
-product-specific trade shortcuts and aliases have been removed. The repository's
-seven generated examples use the context API. Downloading a released workbook
-while testing an unreleased native build can produce unknown-function errors.
+The add-in requires 64-bit Windows desktop Excel.
 
-Start with a coherent dated market
-----------------------------------
+1. Download the complete Excel ZIP from the project's download page.
+2. Extract it into a stable folder.
+3. Load ``quantsupport.xll``, ``QuantSupport.Ribbon64.xll`` and
+   ``ExcelDna.IntelliSense64.xll`` through Excel's Add-ins dialog.
+4. Keep ``quantsupport.intellisense.xml`` in the same folder as the XLLs.
+5. Restart Excel.
 
-A context owns its stores and construction configuration. Put the valuation
-date in B1, quote identifiers in A10:A20 and Mid levels in F10:F20:
+The ribbon and IntelliSense add-ins need .NET Framework 4.6.2 or later.
+
+Use workbooks and add-ins from the same release. The repository's generated
+example workbooks match the current development build. A released workbook
+opened with an unreleased development build, or the other way round, can show
+unknown-function errors.
+
+Start with a dated market
+-------------------------
+
+A context holds the market data and curve settings for one valuation date. Put
+the valuation date in B1, quote identifiers in A10:A20 and Mid levels in
+F10:F20:
 
 .. code-block:: text
 
@@ -26,15 +34,19 @@ date in B1, quote identifiers in A10:A20 and Mid levels in F10:F20:
    B4 =QS.CONTEXT.ADD.CURVE(B2,"SOFR")
    B5 =B2
 
-Base currency and index describe collateral assumptions used for construction.
-For example, EUR OIS in a USD collateral context needs the appropriate FX
-collateral curve. Use a separate EUR/ESTR context for an independent EUR market;
-the swap example demonstrates both markets without mixing their assumptions.
+The base currency and index (here USD and SOFR) set the collateral assumption
+used to build curves. Use one context per independent market. For example, a
+EUR OIS curve inside a USD collateral context needs an FX collateral curve. For
+an independent EUR market, create a separate EUR/ESTR context. The swap example
+shows both markets side by side.
 
-Quote identifiers encode instrument conventions and tenors. Decimal interest
-rates use 0.04 for 4%; a futures price such as 95.25 is in price points.
-Bid and Ask remain absent when omitted. Selecting a missing quote side is an
-error rather than an implicit fallback or an average of other sides.
+Quote conventions:
+
+- Quote identifiers encode the instrument conventions and tenor.
+- Interest rates are decimals: ``0.04`` means 4%.
+- Futures prices are in price points, for example ``95.25``.
+- Bid and Ask have no value unless you supply them. Requesting a missing quote
+  side is an error. The add-in does not substitute another side or an average.
 
 Define the contract, then its position
 --------------------------------------
@@ -49,10 +61,14 @@ Define the contract, then its position
    H5 =QS.EVALUATE(B5,D3,"FairRate(0)",H3)
    H6 =QS.EVALUATE.RESULTS(B5,D3,{"Value","Cashflows","Sensitivities"},H3)
 
-The contract carries dates, rates, indices and notional. The position adds trade
-date, direction, permitted quantity overrides and bond pricing anchors. A policy
-chooses ordinary discount curves; the pricer chooses the native valuation model.
-These are separate concerns in both the workbook and the Rust library.
+Each object has one job:
+
+- The **instrument** (D2) holds the contract terms: dates, rates, indices and
+  notional.
+- The **trade** (D3) adds the trade date, direction, any quantity override and,
+  for bonds, a pricing anchor.
+- The **discount policy** (H2) chooses the discount curves.
+- The **pricer** (H3) chooses the valuation model.
 
 Result views and financial units
 --------------------------------
@@ -66,58 +82,75 @@ Result views and financial units
    =QS.RESULT.CASHFLOW.SUMMARY(H6)
    =QS.CURVE.GET(B5,"SOFR")
 
-Cashflows are signed undiscounted amounts in each row's currency. Positive
-amounts are receipts and negative amounts payments. PV follows the native
-pricer's valuation units. Sensitivities are raw derivatives per unit factor;
-scale decimal-rate derivatives by 0.0001 to estimate a +1 bp change.
-The coupon view preserves accrual dates, rate conventions and fixing indices.
-The summary separates Interest, Capital, Other and Total by payment date and
-currency; it neither allocates accrual-period income nor converts FX.
+- **Cashflows** are undiscounted amounts in each row's currency. Receipts are
+  positive and payments negative.
+- **Value** (PV) is in the pricer's valuation units.
+- **Sensitivities** are raw derivatives per unit change in each market input.
+  For rates in decimals, multiply by 0.0001 to estimate a +1 bp change.
+- **Coupons** show accrual dates, rate conventions and fixing indices.
+- **Cashflow summary** totals Interest, Capital, Other and Total by payment
+  date and currency. It does not spread income over accrual periods and does
+  not convert currencies.
 
-Tables accept trailing transpose and headers flags, defaulting to FALSE/TRUE.
-Leave enough empty cells for dynamic arrays. An obstructed spill is an Excel
-layout problem and does not require rebuilding native market data.
+Tables accept two optional flags at the end: ``transpose`` (default FALSE) and
+``headers`` (default TRUE). Leave enough empty cells for the result to spill.
+If a spill is blocked, clear the cells in the way; the market does not need to
+be rebuilt.
 
 Use the ribbon and panel
 ------------------------
 
-Market groups contexts and curves; Pricing opens an instrument or trade request.
-Workbook provides object browsing, selection inspection and refresh. Calculation
-contains Reset Memory & Rebuild. Setup & help links to the guide and reference.
+The **QuantSupport** ribbon tab has these groups:
 
-The panel uses labeled form rows and resizable virtual grids. Ctrl+A selects all
-rows and Ctrl+C copies values with headings. The copy menu also supports the
-whole table. Numbers follow Excel's decimal separator, including custom settings.
-Details show financial data; Copy handle and Go to cell provide explicit access
-to the underlying worksheet without a method trace in the normal display.
+- **Market**: browse pricing contexts and curves.
+- **Pricing**: open pricing for an instrument or trade.
+- **Workbook**: browse objects, inspect the selected cell and refresh the
+  browser.
+- **Calculation**: **Refresh Pricing** and **Reset Memory & Rebuild**.
+- **Setup & help**: links to this guide and the function reference.
 
-Object, context and pricer selectors open searchable lists. Search by name,
-type or valuation date, then click a row or press Enter. Escape closes the list
-without changing the selection. These lists retain all objects in large books.
-Refreshing shows a loading message while browser data is decoded in the
-background; repeated refresh clicks share the pending load.
+Working in the panel:
 
-When a native worksheet function fails, the panel reports its source sheet and
-cell with the library message. Correcting the input or clearing the formula
-removes the message. Pricing queries require an explicit Run request; ordinary
-browsing never recalculates the workbook. Changed dependencies require worksheet
-recalculation before they can be priced safely.
+- Tables have resizable columns. Ctrl+A selects all rows, and Ctrl+C copies
+  values with their headings. The copy menu can also copy the whole table.
+- Numbers use Excel's decimal separator, including custom settings.
+- Details show an object's financial data. **Copy handle** copies its
+  reference, and **Go to cell** jumps to its formula.
+- Object, context and pricer selectors open searchable lists. Search by name,
+  type or valuation date, then click a row or press Enter. Escape closes the
+  list without changing the selection. The lists show every object, even in
+  large workbooks.
+- While the browser loads, it shows a loading message. Clicking refresh again
+  during a load does not start a second one.
+
+Errors and recalculation:
+
+- When a worksheet function fails, the panel shows its sheet, cell and the
+  library's error message. The message disappears when you correct the input
+  or clear the formula.
+- Pricing in the panel runs only when you click **Run**. Browsing never
+  recalculates the workbook.
+- After you change inputs, recalculate the worksheet before pricing in the
+  panel.
 
 Build and verification
 ----------------------
 
-On Windows use stable Rust, Visual Studio Build Tools and .NET SDK 8 or later:
+On Windows, install stable Rust, Visual Studio Build Tools and .NET SDK 8 or
+later, then run:
 
 .. code-block:: powershell
 
    powershell -ExecutionPolicy Bypass -File tools/excel/build.ps1
 
-The distribution includes the native XLL, ribbon, pinned IntelliSense companion,
-XML metadata and licenses. On any platform regenerate examples with
-``python tools/excel/examples/create_examples.py``. Portable tests validate
-native markets, ownership and workbook formulas; live loading and panel
-rendering require Windows Excel. See :doc:`risk-and-history` for historical
-snapshot selection and batch evaluation.
+The output includes the add-in XLL, the ribbon, the pinned IntelliSense add-in,
+the XML metadata and the licenses.
+
+On any platform, regenerate the example workbooks with
+``python tools/excel/examples/create_examples.py``. The portable tests check
+market construction, object handling and workbook formulas. Loading the add-in
+and the panel's display can only be tested in Windows Excel. See
+:doc:`risk-and-history` for historical snapshot selection and batch evaluation.
 
 Downloads
 ---------
@@ -128,5 +161,6 @@ Downloads
 * `Historical workbook <https://jmelo11.github.io/quantsupport-excel/downloads/historical_pricing_example.xlsx>`_
 * `10,000 valuations in one batch <https://jmelo11.github.io/quantsupport-excel/downloads/origination_10000_batch.xlsx>`_
 
-Development workbooks under ``examples/workbooks`` should be used with a
-locally built development add-in; these hosted downloads track published builds.
+These downloads match the published release. The workbooks in
+``examples/workbooks`` match the development source; use them with an add-in
+you built locally.
